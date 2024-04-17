@@ -1,0 +1,16 @@
+executable = run_migration.sh
+arguments = $(Cluster)_$(Process)
+
+log = logs/migration_$(Cluster)_$(Process).log
+error = logs/migration_$(Cluster)_$(Process).err
+output = logs/migration_$(Cluster)_$(Process).out
+
+transfer_input_files = nedwingreenospool.py, migration_env.tar.gz
+
++JobDurationCategory = "Medium"
+
+request_cpus = 1
+request_memory = 2GB
+request_disk = 2GB
+
+queue 3

@@ -11,3 +11,5 @@ solmigration.txt
 __pycache__
 
 .DS_Store
+
+*.tar.gz
