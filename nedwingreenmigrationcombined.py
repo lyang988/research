@@ -7,17 +7,17 @@ supply = 1 # total nutrient supply
 delta = supply 
 e = 1 # total enzyme budget
 
-timebound = 6 # paper uses 1200
-mu = 0.5 # Parameter for migration rate; maybe change to exponential
+timebound = 760 # paper uses 1200
+mu = 0.05 # Parameter for migration rate; maybe change to exponential
 timestep = 1
 
 d = 1 # diffusion coefficient
 l = 20 # length of the system
 s = np.array([.25, .45, .3]) # nutrient supply
 p = len(s) # number of nutrients
-np.random.seed(28)
+np.random.seed(1805)
 
-original_m = 10 # number of species
+original_m = 100 # number of species
 migration_width = l / (5 * original_m) # width of migration zone
 
 def randomStrats(number):
@@ -127,6 +127,7 @@ def ndot(n, t=0):
 
 def performMigration(pops):
     global positionToSpecies
+    return pops, False
     pop_cumsum = np.insert(np.cumsum(pops), 0, 0)
     num_segs = len(pops)
     for _ in range(100):
@@ -199,6 +200,61 @@ def performMigration(pops):
     return np.concatenate((populations_unaffected_before, affected_pops, populations_unaffected_after)), True
     
 
+# Removes segments with population size less than lambda, redistributing their population to their neighbors
+# - half each
+def removeSmallSegments(pops, lamb):
+    global positionToSpecies
+
+    segs_to_delete = pops < lamb
+    new_pops = np.zeros(len(pops) - sum(segs_to_delete))
+
+    i = 0
+    j = 0
+    while i < len(pops):
+        if segs_to_delete[i]:
+            if j > 0 and j < len(new_pops):
+                new_pops[j-1] += pops[i] / 2
+                new_pops[j] += pops[i] / 2
+            elif j == 0:
+                new_pops[j] += pops[i]
+            else:
+                # j == len(new_pops)
+                new_pops[j-1] += pops[i]
+
+            i += 1
+            continue
+
+        new_pops[j] += pops[i]
+        j += 1
+        i += 1
+
+    # Update positionToSpecies
+    new_pos_to_species = [spec for i, spec in enumerate(positionToSpecies) if not segs_to_delete[i]]
+
+    # Iterate through positionToSpecies, "merging" species that are the same
+    segs_to_merge = [i != 0 and new_pos_to_species[i] == new_pos_to_species[i-1] for i in range(len(new_pos_to_species))]
+    merged_pops = np.zeros(len(new_pops) - sum(segs_to_merge))
+
+    i = 0
+    j = 0
+    while i < len(new_pops):
+        if segs_to_merge[i]:
+            merged_pops[j-1] += new_pops[i]
+        else:
+            merged_pops[j] += new_pops[i]
+            j += 1
+        i += 1
+    
+    positionToSpecies = [spec for i, spec in enumerate(new_pos_to_species) if not segs_to_merge[i]]
+
+    return merged_pops
+
+# tests the above function:
+# print(removeSmallSegments(np.array([0.1, 0.2, 0.3, 0.4, 0.5]), 0.2))
+# print(removeSmallSegments(np.array([0.5, 0.1, 0.3, 0.4, 0.5]), 0.2))
+# print(removeSmallSegments(np.array([0.5, 0.1, 0.3, 0.4, 0.1]), 0.2))
+# exit()
+
 # Initial Conditions and Integration
 
 nInit = l*np.ones(original_m)/original_m # initial population
@@ -230,11 +286,15 @@ while t < timebound:
     nToMigrate = stepSol[-1]
 
     # This is the migration step
-    nCur, succeeded = performMigration(nToMigrate)
+    nToEliminate, succeeded = performMigration(nToMigrate)
     if succeeded:
         successful_migrations += 1
     else:
         failed_migrations += 1
+    
+    # Remove segments with population size less than lambda
+    # Lambda is l / num_species / 1000
+    nCur = removeSmallSegments(nToEliminate, l / original_m / 10)
 
 print(f"Successful migrations: {successful_migrations}; Failed migrations: {failed_migrations}")
 
@@ -302,7 +362,6 @@ axs[0][0].set_ylabel("Position")
 final_sol = collectedSols[-1][0][-1]
 final_m = len(final_sol)
 final_sol_postospec = collectedSols[-1][2]
-final_sol_cumsum = np.insert(np.cumsum(sol), 0, 0)
 
 lamb = 0.1
 
@@ -331,20 +390,25 @@ axs[1][1].set_xscale('log')
 axs[1][1].set_xlabel("Population Size")
 axs[1][1].set_ylabel("Density")
 
-print(f"Number of migrations: {len(collectedSols) - 1}; Number of segments with population size greater than {lamb}: {num_seg_large}; number of species as such: {num_spec_large}")
+print(f"Number of migrations: {len(collectedSols) - 1}; Number of segments with population size greater than {lamb}: {num_seg_large}; number of species as such: {num_spec_large}; number of nonzero species: {sum(1 for x in species_cover if x > 0)}")
 
-# Plots final resource graph
-for nutrient in range(p):
-    ABCoeff = getConcentration(final_sol, nutrient, final_sol_postospec)
-    print(ABCoeff)
-    for pos in np.linspace(0, l, 100):
-        segment = np.searchsorted(final_sol_cumsum, pos, side='right') - 1
-        species = final_sol_postospec[segment]
-        conc = calculateConcentrationForNutrientAtPoint(pos - final_sol_cumsum[segment], species, nutrient, ABCoeff[segment], ABCoeff[segment + final_m])
-        if conc < 0:
-            print(f"Concentration is negative: {pos - final_sol_cumsum[segment]}, {species}, {conc}, {ABCoeff[species]}, {ABCoeff[species + final_m]}, {nutrient}")
-            newconc = calculateConcentrationForNutrientAtPoint(pos - final_sol_cumsum[segment], species, nutrient, ABCoeff[species], ABCoeff[species + final_m])
-            exit()
-        axs[2][0].scatter(pos, conc, color=f"C{nutrient}")
+def plot_resource_graph(sol, sol_postospec):
+    sol_cumsum = np.insert(np.cumsum(sol), 0, 0)
+    sol_m = len(sol)
+    # Plots final resource graph
+    for nutrient in range(p):
+        ABCoeff = getConcentration(sol, nutrient, sol_postospec)
+        poses = np.linspace(0, l, 3 * sol_m, endpoint=False)
+        concs = []
+        for pos in poses:
+            segment = np.searchsorted(sol_cumsum, pos, side='right') - 1
+            species = sol_postospec[segment]
+            conc = calculateConcentrationForNutrientAtPoint(pos - sol_cumsum[segment], species, nutrient, ABCoeff[segment], ABCoeff[segment + sol_m])
+            concs.append(conc)
+        
+        axs[2][0].scatter(poses, concs, color=f"C{nutrient}")
+
+# plot_resource_graph(collectedSols[0][0][0], collectedSols[0][2])
+plot_resource_graph(final_sol, final_sol_postospec)
 
 plt.show()
