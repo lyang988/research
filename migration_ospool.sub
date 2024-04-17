@@ -1,3 +1,7 @@
+universe    = vanilla
+
++SingularityImage = "/cvmfs/singularity.opensciencegrid.org/opensciencegrid/osgvo-ubuntu-20.04:latest"
+
 executable = run_migration.sh
 arguments = $(Cluster)_$(Process)
 
