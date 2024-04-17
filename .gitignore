@@ -1,0 +1,13 @@
+migration/
+
+*.png
+
+prof.txt
+sol.txt
+sol2.txt
+solfast.txt
+solmigration.txt
+
+__pycache__
+
+.DS_Store
