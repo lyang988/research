@@ -239,4 +239,5 @@ while t < timebound:
 print(f"Successful migrations: {successful_migrations}; Failed migrations: {failed_migrations}")
 
 for i, sol in enumerate(collectedSols):
-    np.savetxt(f"migration/{sys.argv[1]}-sol{i}.txt", sol)
+    np.savetxt(f"migration/{sys.argv[1]}-sol{i}.txt", sol[0])
+    np.savetxt(f"migration/{sys.argv[1]}-times{i}.txt", sol[1])
