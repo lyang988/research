@@ -390,7 +390,7 @@ axs[1][1].set_xscale('log')
 axs[1][1].set_xlabel("Population Size")
 axs[1][1].set_ylabel("Density")
 
-print(f"Number of migrations: {len(collectedSols) - 1}; Number of segments with population size greater than {lamb}: {num_seg_large}; number of species as such: {num_spec_large}; number of nonzero species: {sum(1 for x in species_cover if x > 0)}")
+print(f"Number of migrations: {len(collectedSols) - 1}; Number of segments with population size greater than {lamb}: {num_seg_large}; number of species as such: {num_spec_large}; number of nonzero species: {sum(1 for x in species_cover if x > 0)}; number of nonzero segments: {sum(1 for x in final_sol if x > 0)}")
 
 def plot_resource_graph(sol, sol_postospec):
     sol_cumsum = np.insert(np.cumsum(sol), 0, 0)
